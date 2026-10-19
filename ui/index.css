@@ -1,0 +1,2 @@
+/* webhook-inbox 1.0.0 – built with Hostwerk build-native.js */
+.whi-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}@media(max-width:900px){.whi-grid{grid-template-columns:1fr}}.whi-list{overflow:hidden}.whi-item{background:none;border:0;width:100%;text-align:left;font:inherit;color:var(--text);cursor:pointer;gap:8px}.whi-item.active{background:var(--accent-soft)}.whi-addr{flex-wrap:wrap}.whi-addr code{min-width:0}.whi-pre{max-height:480px;white-space:pre-wrap;word-break:break-word}.whi-break{word-break:break-all}
