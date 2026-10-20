@@ -11,6 +11,7 @@ Eine Adresse, an die Stripe, GitHub, PayPal & Co. ihre Webhooks schicken – auf
 ## Was sie kann
 
 - Ein Empfänger auf diesem PC (Port frei wählbar) – mit einem Klick öffentlich über Hostwerks Tunnel, der Notfall-Modus schließt ihn mit
+- Eine feste Adresse mit eigener Domain (Livebetrieb → Fernzugriff), die sich nie ändert – Signaturen bleiben gültig
 - Jeder Aufruf mit Methode, Pfad, Kopfzeilen und Inhalt; JSON lesbar
 - Signatur-Prüfung für GitHub, Stripe und beliebige HMAC-Kopfzeilen
 - Jeden Aufruf an dein Projekt weiterleiten und dessen Antwort sehen – oder einen gespeicherten später erneut abspielen

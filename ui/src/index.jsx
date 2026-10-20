@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Inbox, Play, Square, Globe, Copy, Trash2, RotateCcw, ShieldCheck, ShieldAlert, Settings2, ArrowRight } from 'lucide-react';
+import { Inbox, Play, Square, Globe, Copy, Trash2, RotateCcw, ShieldCheck, ShieldAlert, Settings2, ArrowRight, Link2, RefreshCw } from 'lucide-react';
 import { get, post, put, del, useApi, on } from '@hostwerk/api';
 import { Btn, Tabs, Seg, Empty, Loading, Callout, InfoTip, Field, Modal, toast, confirmDialog } from '@hostwerk/ui';
 import './style.css';
@@ -75,6 +75,7 @@ function WebhookInboxPage() {
   useEffect(() => { if (s && !sel && s.items[0]) setSel(s.items[0].id); }, [s]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!s) return <Loading />;
   const act = async (p) => { try { st.setData(await post(`/webhook-inbox/${p}`)); } catch (e) { toast.error(e); } };
+  const fixed = async (on, rotate = false) => { if (rotate && !(await confirmDialog({ title: 'New fixed address?', text: 'The old address stops working at once – update it at the sender (GitHub, Stripe …).', confirm: 'New address' }))) return; try { st.setData(await post('/webhook-inbox/fixed', { on, rotate })); } catch (e) { toast.error(e); } };
   const clear = async () => { if (await confirmDialog({ title: 'Delete all stored calls?', confirm: 'Delete', danger: true })) { st.setData(await del('/webhook-inbox/items')); setSel(null); } };
   const local = `http://localhost:${s.port}`;
   return (
@@ -99,6 +100,13 @@ function WebhookInboxPage() {
             <Globe size={14} className="muted" />
             {s.public ? (<><span className="small muted">Public:</span><code className="ellipsis">{s.public}</code><button type="button" className="btn ghost xs icon" title="Copy" aria-label="Copy" onClick={() => copy(s.public, 'Address')}><Copy size={12} /></button><Btn className="sm ghost" onClick={() => act('unshare')}>Close public address</Btn></>)
               : (<><span className="small muted grow">Senders on the internet need a public address. Hostwerk opens one through its tunnel – it stays only while it runs, and emergency mode closes it.</span><Btn className="sm" icon={Globe} disabled={!s.tunnelReady} title={s.tunnelReady ? '' : 'Set up the tunnel under Live → Share first'} onClick={() => act('share')}>Make public</Btn></>)}
+          </div>
+          {/* Feste Adresse über die eigene Domain (Fernzugriff im Livebetrieb) – bleibt gleich, anders als die Tunnel-Adresse */}
+          <div className="row-tight whi-addr">
+            <Link2 size={14} className="muted" />
+            {s.fixed && s.fixed.url ? (<><span className="small muted">Fixed:</span><code className="ellipsis">{`${s.fixed.url}/…`}</code><button type="button" className="btn ghost xs icon" title="Copy" aria-label="Copy" onClick={() => copy(s.fixed.url, 'Address')}><Copy size={12} /></button><Btn className="sm ghost" icon={RefreshCw} onClick={() => fixed(true, true)}>New address</Btn><Btn className="sm ghost" onClick={() => fixed(false)}>Turn off</Btn></>)
+              : s.fixed && s.fixed.on ? (<><span className="small c-warn grow">The fixed address needs remote access with your own domain – set it up under Live → Domains &amp; HTTPS and Remote access.</span><a className="btn sm" href="#/live/fernzugriff">Open Live</a><Btn className="sm ghost" onClick={() => fixed(false)}>Turn off</Btn></>)
+                : (<><span className="small muted grow">With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe &amp; Co.</span><Btn className="sm" icon={Link2} onClick={() => fixed(true)}>Fixed address</Btn></>)}
           </div>
           {s.settings.forward && <div className="small muted row-tight"><ArrowRight size={13} />Every call goes on to <code>{s.settings.forward}</code></div>}
         </div>

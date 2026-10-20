@@ -8,9 +8,13 @@
  *   POST   /api/webhook-inbox/start | stop     → local receiver on 127.0.0.1:<port>
  *   POST   /api/webhook-inbox/share | unshare  → public address through Hostwerk's tunnel (cloudflared)
  *   POST   /api/webhook-inbox/items/:id/replay → { target } → answer of the target
+ *   POST   /api/webhook-inbox/fixed            → { on, rotate } fixed address through Hostwerk's remote access (own domain)
+ *   ANY    /api/webhook-inbox/in/<token>/…     → public: passed on to the local receiver (only while the token is set)
  * New calls are announced with the live event "webhook-inbox".
  */
 const path = require('path');
+const http = require('http');
+const crypto = require('crypto');
 const { Inbox } = require('./inbox');
 
 let inbox = null;
@@ -20,9 +24,16 @@ function activate(host) {
   inbox = new Inbox({ dir: path.join(ctx.paths.data, 'webhook-inbox'), onItem: (it) => host.broadcast({ type: 'webhook-inbox', id: it.id }) });
   const tunnelKey = () => `localhost-${inbox.cfg.port}`;
   const tunnel = () => (ctx.tunnels ? ctx.tunnels.list().find((t) => t.key === tunnelKey()) : null);
+  // Feste Adresse: nur mit laufendem Fernzugriff und eigener Domain (Livebetrieb → Domains & HTTPS / Fernzugriff)
+  const fixedState = () => {
+    const tok = inbox.read('fixed', null);
+    const r = ctx.remote && ctx.remote.status ? ctx.remote.status() : null;
+    const base = r && r.running && r.domain ? `https://${r.domain}${r.port && r.port !== 443 ? `:${r.port}` : ''}` : null;
+    return { on: !!tok, url: tok && base ? `${base}/api/webhook-inbox/in/${tok}` : null, domain: (r && r.domain) || null, remoteRunning: !!(r && r.running) };
+  };
   const state = () => {
     const t = tunnel();
-    return { settings: { ...inbox.cfg, secret: inbox.cfg.secret ? '••••••' : '' }, hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), items: inbox.list() };
+    return { settings: { ...inbox.cfg, secret: inbox.cfg.secret ? '••••••' : '' }, hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), fixed: fixedState(), items: inbox.list() };
   };
   // Was running before the restart → start again
   if (inbox.read('running', false)) inbox.start().catch((e) => host.log('start failed:', e.message));
@@ -51,6 +62,36 @@ function activate(host) {
     res.json(state());
   });
   host.router.post('/webhook-inbox/unshare', async (req, res) => { const t = tunnel(); if (t) await ctx.tunnels.stop(t.key); res.json(state()); });
+
+  // Feste Adresse über Hostwerks Fernzugriff mit eigener Domain (Livebetrieb): https://<domain>/api/webhook-inbox/in/<token>/…
+  // Bleibt gleich, solange die Domain bleibt – anders als die Tunnel-Adresse. Der Schlüssel im Pfad ist das Geheimnis.
+  host.router.post('/webhook-inbox/fixed', (req, res) => {
+    const on = !!(req.body || {}).on;
+    if (!on) inbox.write('fixed', null);
+    else if (!inbox.read('fixed', null) || (req.body || {}).rotate) inbox.write('fixed', crypto.randomBytes(16).toString('hex'));
+    res.json(state());
+  });
+  host.publicRouter.use('/webhook-inbox/in/:token', (req, res) => {
+    const tok = inbox.read('fixed', null);
+    const given = String(req.params.token || '');
+    if (!tok || given.length !== tok.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(tok))) return res.status(404).json({ error: 'Not found' });
+    if (!inbox.server) return res.status(503).json({ error: host.t('The webhook inbox is not running.') });
+    // An den Empfänger auf diesem PC weiterreichen – dieselbe Logik (Prüfen, Weiterleiten, Antwort) wie lokal und im Tunnel
+    const headers = { ...req.headers };
+    for (const k of ['host', 'cookie', 'content-length', 'connection']) delete headers[k];
+    const consumed = req.readableEnded || req.complete;
+    let body = null;
+    if (req.rawBody) body = req.rawBody;
+    else if (consumed && req.body !== undefined && !['GET', 'HEAD'].includes(req.method)) body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+    if (body) headers['content-length'] = String(body.length);
+    else if (!consumed && req.headers['content-length']) headers['content-length'] = req.headers['content-length'];
+    headers['x-forwarded-for'] = req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
+    const up = http.request({ host: '127.0.0.1', port: inbox.port, method: req.method, path: req.url || '/', headers, timeout: 30000 }, (r) => { res.writeHead(r.statusCode || 502, r.headers); r.pipe(res); });
+    up.on('timeout', () => up.destroy(new Error('timeout')));
+    up.on('error', (e) => { if (!res.headersSent) res.status(502).json({ error: e.message }); });
+    if (body) up.end(body); else if (!consumed) req.pipe(up); else up.end();
+    return undefined;
+  });
   host.router.post('/webhook-inbox/items/:id/replay', async (req, res) => {
     const target = String((req.body || {}).target || inbox.cfg.forward || '');
     if (!target) throw host.error(400, 'Please enter a target address, e.g. http://localhost:8080/webhook');

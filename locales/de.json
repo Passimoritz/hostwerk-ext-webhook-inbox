@@ -93,5 +93,15 @@
   "Signature is valid": "Signatur ist gültig",
   "Signature does not match": "Signatur passt nicht",
   "(empty)": "(leer)",
-  "Address": "Adresse"
+  "Address": "Adresse",
+  "Fixed:": "Fest:",
+  "New address": "Neue Adresse",
+  "Turn off": "Ausschalten",
+  "Open Live": "Livebetrieb öffnen",
+  "Fixed address": "Feste Adresse",
+  "New fixed address?": "Neue feste Adresse?",
+  "The old address stops working at once – update it at the sender (GitHub, Stripe …).": "Die alte Adresse geht sofort nicht mehr – trag die neue beim Absender ein (GitHub, Stripe …).",
+  "The webhook inbox is not running.": "Das Webhook-Postfach läuft gerade nicht.",
+  "The fixed address needs remote access with your own domain – set it up under Live → Domains & HTTPS and Remote access.": "Die feste Adresse braucht den Fernzugriff mit eigener Domain – einrichten unter Livebetrieb → Domains & HTTPS und Fernzugriff.",
+  "With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe & Co.": "Mit eigener Domain (Livebetrieb → Fernzugriff) bekommt das Postfach eine Adresse, die sich nie ändert – praktisch für GitHub, Stripe & Co."
 }

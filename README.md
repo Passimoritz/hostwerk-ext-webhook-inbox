@@ -11,6 +11,7 @@ An address for the webhooks of Stripe, GitHub, PayPal & co. – public through H
 ## What it does
 
 - A local receiver (port of your choice) – public with one click through Hostwerk's tunnel, closed again by emergency mode
+- A fixed address with your own domain (Live → Remote access) that never changes – signatures stay valid
 - Every call with method, path, headers and body; JSON shown readably
 - Signature check for GitHub, Stripe and any HMAC header
 - Forward each call to your project and see its answer – or replay a stored call later
