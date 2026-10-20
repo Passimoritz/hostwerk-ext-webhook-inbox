@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Inbox, Play, Square, Globe, Copy, Trash2, RotateCcw, ShieldCheck, ShieldAlert, Settings2, ArrowRight, Link2, RefreshCw } from 'lucide-react';
+import { Inbox, Play, Square, Globe, Copy, Trash2, RotateCcw, ShieldCheck, ShieldAlert, Settings2, ArrowRight, Link2, RefreshCw, Zap } from 'lucide-react';
 import { get, post, put, del, useApi, on } from '@hostwerk/api';
 import { Btn, Tabs, Seg, Empty, Loading, Callout, InfoTip, Field, Modal, toast, confirmDialog } from '@hostwerk/ui';
 import './style.css';
@@ -44,6 +44,8 @@ function Detail({ id, s }) {
   useEffect(() => { setIt(null); setReplayed(null); get(`/webhook-inbox/items/${id}`).then(setIt).catch((e) => toast.error(e)); }, [id]);
   const pretty = useMemo(() => { if (!it || it.base64) return null; try { return JSON.stringify(JSON.parse(it.body), null, 2); } catch { return it.body; } }, [it]);
   if (!it) return <Loading />;
+  // Synergie: im API-Tester öffnen (ändern, erneut senden, als Sammlung behalten)
+  const toApiTester = async () => { try { const r = await post(`/webhook-inbox/items/${id}/to-api-tester`); location.hash = `/ext/api-tester?col=${encodeURIComponent(r.col)}&req=${encodeURIComponent(r.req)}`; } catch (e) { toast.error(e); } };
   const replay = async () => { setBusy(true); try { setReplayed(await post(`/webhook-inbox/items/${id}/replay`, { target })); } catch (e) { toast.error(e); } setBusy(false); };
   const v = it.verified;
   return (
@@ -60,6 +62,7 @@ function Detail({ id, s }) {
       <div className="card"><div className="card-body stack" style={{ gap: 8 }}>
         <div className="row-tight"><b className="small grow">Replay this call</b><InfoTip pop title="Replay">Sends exactly this call again – same method, headers and body – for example after you fixed your webhook code.</InfoTip></div>
         <div className="row-tight"><input className="input sm mono grow" value={target} aria-label="Target address" placeholder="http://localhost:8080/webhook" onChange={(e) => setTarget(e.target.value)} /><Btn className="sm primary" icon={RotateCcw} busy={busy} onClick={replay}>Replay</Btn></div>
+        {s.apiTester && <div className="row-tight"><Btn className="sm" icon={Zap} onClick={toApiTester}>Open in API tester</Btn><span className="tiny muted">Change it there and send it again.</span></div>}
         {replayed && <div className={`small ${replayed.error || replayed.status >= 400 ? 'c-err' : 'c-ok'}`}>{replayed.error || `${replayed.status} in ${replayed.ms} ms`}{replayed.body ? <pre className="code-block whi-pre" style={{ marginTop: 6, maxHeight: 160 }}>{replayed.body}</pre> : null}</div>}
       </div></div>
     </div>

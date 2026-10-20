@@ -103,5 +103,8 @@
   "The old address stops working at once – update it at the sender (GitHub, Stripe …).": "Die alte Adresse geht sofort nicht mehr – trag die neue beim Absender ein (GitHub, Stripe …).",
   "The webhook inbox is not running.": "Das Webhook-Postfach läuft gerade nicht.",
   "The fixed address needs remote access with your own domain – set it up under Live → Domains & HTTPS and Remote access.": "Die feste Adresse braucht den Fernzugriff mit eigener Domain – einrichten unter Livebetrieb → Domains & HTTPS und Fernzugriff.",
-  "With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe & Co.": "Mit eigener Domain (Livebetrieb → Fernzugriff) bekommt das Postfach eine Adresse, die sich nie ändert – praktisch für GitHub, Stripe & Co."
+  "With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe & Co.": "Mit eigener Domain (Livebetrieb → Fernzugriff) bekommt das Postfach eine Adresse, die sich nie ändert – praktisch für GitHub, Stripe & Co.",
+  "Open in API tester": "Im API-Tester öffnen",
+  "Change it there and send it again.": "Dort ändern und erneut senden.",
+  "Install the API tester first (Extensions → Discover).": "Installiere zuerst den API-Tester (Erweiterungen → Entdecken)."
 }

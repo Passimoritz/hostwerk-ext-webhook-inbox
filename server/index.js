@@ -8,6 +8,7 @@
  *   POST   /api/webhook-inbox/start | stop     → local receiver on 127.0.0.1:<port>
  *   POST   /api/webhook-inbox/share | unshare  → public address through Hostwerk's tunnel (cloudflared)
  *   POST   /api/webhook-inbox/items/:id/replay → { target } → answer of the target
+ *   POST   /api/webhook-inbox/items/:id/to-api-tester → { col, req } (needs the API tester extension)
  *   POST   /api/webhook-inbox/fixed            → { on, rotate } fixed address through Hostwerk's remote access (own domain)
  *   ANY    /api/webhook-inbox/in/<token>/…     → public: passed on to the local receiver (only while the token is set)
  * New calls are announced with the live event "webhook-inbox".
@@ -33,7 +34,7 @@ function activate(host) {
   };
   const state = () => {
     const t = tunnel();
-    return { settings: { ...inbox.cfg, secret: inbox.cfg.secret ? '••••••' : '' }, hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), fixed: fixedState(), items: inbox.list() };
+    return { settings: { ...inbox.cfg, secret: inbox.cfg.secret ? '••••••' : '' }, hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), fixed: fixedState(), apiTester: !!(ctx.apiTester && ctx.apiTester.addRequest), items: inbox.list() };
   };
   // Was running before the restart → start again
   if (inbox.read('running', false)) inbox.start().catch((e) => host.log('start failed:', e.message));
@@ -62,6 +63,20 @@ function activate(host) {
     res.json(state());
   });
   host.router.post('/webhook-inbox/unshare', async (req, res) => { const t = tunnel(); if (t) await ctx.tunnels.stop(t.key); res.json(state()); });
+
+  // Synergie mit dem API-Tester: empfangenen Aufruf als Anfrage in die Sammlung „Webhook-Postfach“ legen – zum Ändern
+  // und erneut Senden. Ziel: die Weiterleitung (dein Projekt) bzw. der Empfänger auf diesem PC.
+  host.router.post('/webhook-inbox/items/:id/to-api-tester', (req, res) => {
+    const at = ctx.apiTester;
+    if (!at || typeof at.addRequest !== 'function') throw host.error(409, 'Install the API tester first (Extensions → Discover).');
+    const it = inbox.get(req.params.id);
+    const base = (inbox.cfg.forward || `http://127.0.0.1:${inbox.port || inbox.cfg.port}`).replace(/\/$/, '');
+    const skip = /^(host|content-length|connection|cookie|accept-encoding|x-forwarded-.*|cf-.*|transfer-encoding)$/i;
+    const headers = Object.entries(it.headers || {}).filter(([k]) => !skip.test(k)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]);
+    const ct = String((it.headers || {})['content-type'] || '');
+    const r = at.addRequest({ name: `${it.method} ${it.path}${(it.headers || {})['x-github-event'] ? ` (${it.headers['x-github-event']})` : ''}`, method: it.method, url: `${base}${it.path}${it.query ? `?${it.query}` : ''}`, headers, body: it.base64 ? '' : it.body || '', bodyType: /json/.test(ct) ? 'json' : /x-www-form-urlencoded/.test(ct) ? 'form' : 'text' }, { collection: 'Webhook inbox' });
+    res.json(r);
+  });
 
   // Feste Adresse über Hostwerks Fernzugriff mit eigener Domain (Livebetrieb): https://<domain>/api/webhook-inbox/in/<token>/…
   // Bleibt gleich, solange die Domain bleibt – anders als die Tunnel-Adresse. Der Schlüssel im Pfad ist das Geheimnis.
