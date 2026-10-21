@@ -10,6 +10,7 @@ An address for the webhooks of Stripe, GitHub, Shopify, Slack & co. – public t
 
 ## What it does
 
+- **Where:** Projects → Webhooks – no own sidebar entry since 1.4.0; the full page stays under Extensions → Open
 - A local receiver (port of your choice) – public with one click through Hostwerk's tunnel, closed again by emergency mode
 - A fixed address with your own domain (Live → Remote access) that never changes – signatures stay valid
 - Every call with method, path, headers and body; JSON shown readably; search and filter by event

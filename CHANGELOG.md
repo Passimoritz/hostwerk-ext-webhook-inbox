@@ -1,3 +1,7 @@
+## 1.4.0
+
+- Lives where it belongs: Projects → Webhooks – no own sidebar entry any more (Hostwerk 3.0+); the full page stays under Extensions → Open and can be pinned in the sidebar settings. / Steckt jetzt dort, wo sie hingehört: Projekte → Webhooks – kein eigener Seitenleisten-Eintrag mehr (Hostwerk 3.0+); die ganze Seite bleibt unter Erweiterungen → Öffnen und lässt sich in den Seitenleisten-Einstellungen anheften.
+
 ## 1.3.0
 
 - Security: the signature secret and the login headers of stored calls (Authorization, Cookie, API keys …) are sealed with Hostwerk's key and only shown masked; older data is sealed on the first start. / Signatur-Geheimnis und Anmelde-Kopfzeilen versiegelt.

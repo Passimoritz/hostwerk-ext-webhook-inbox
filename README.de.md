@@ -10,6 +10,7 @@ Eine Adresse, an die Stripe, GitHub, Shopify, Slack & Co. ihre Webhooks schicken
 
 ## Was sie kann
 
+- **Wo:** Projekte → Webhooks – seit 1.4.0 ohne eigenen Seitenleisten-Eintrag; die ganze Seite bleibt unter Erweiterungen → Öffnen
 - Ein Empfänger auf diesem PC (Port frei wählbar) – mit einem Klick öffentlich über Hostwerks Tunnel, der Notfall-Modus schließt ihn mit
 - Eine feste Adresse mit eigener Domain (Livebetrieb → Fernzugriff), die sich nie ändert – Signaturen bleiben gültig
 - Jeder Aufruf mit Methode, Pfad, Kopfzeilen und Inhalt; JSON lesbar; Suche und Filter nach Ereignis
