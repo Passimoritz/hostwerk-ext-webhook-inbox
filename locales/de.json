@@ -54,32 +54,6 @@
   "Sharing is not available in this Hostwerk.": "Teilen gibt es in diesem Hostwerk nicht.",
   "The tunnel program is not installed yet – set it up under Live → Share.": "Das Tunnel-Programm ist noch nicht installiert – richte es unter Livebetrieb → Teilen ein.",
   "Please enter a target address, e.g. http://localhost:8080/webhook": "Bitte eine Zieladresse eingeben, z. B. http://localhost:8080/webhook",
-  "$patterns": [
-    [
-      "Headers ({})",
-      "Kopfzeilen ({})"
-    ],
-    [
-      "Send a webhook to {}/your-path – it shows up here at once.",
-      "Schicke einen Webhook an {}/dein-pfad – er erscheint sofort hier."
-    ],
-    [
-      "{} copied",
-      "{} kopiert"
-    ],
-    [
-      "Forwarded to {}: {}",
-      "Weitergeleitet an {}: {}"
-    ],
-    [
-      "Header {} is missing",
-      "Kopfzeile {} fehlt"
-    ],
-    [
-      "Port {} is in use – choose another one.",
-      "Port {} ist belegt – bitte einen anderen wählen."
-    ]
-  ],
   "Invalid target address": "Ungültige Zieladresse",
   "Nothing answers at the target – is your project running?": "Am Ziel antwortet nichts – läuft dein Projekt?",
   "No secret set": "Kein Geheimnis hinterlegt",
@@ -106,5 +80,96 @@
   "With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe & Co.": "Mit eigener Domain (Livebetrieb → Fernzugriff) bekommt das Postfach eine Adresse, die sich nie ändert – praktisch für GitHub, Stripe & Co.",
   "Open in API tester": "Im API-Tester öffnen",
   "Change it there and send it again.": "Dort ändern und erneut senden.",
-  "Install the API tester first (Extensions → Discover).": "Installiere zuerst den API-Tester (Erweiterungen → Entdecken)."
+  "Install the API tester first (Extensions → Discover).": "Installiere zuerst den API-Tester (Erweiterungen → Entdecken).",
+  "e.g. http://localhost:8080/webhook – the sender gets the answer below at once, your project gets the call right after.": "z. B. http://localhost:8080/webhook – der Absender bekommt sofort die Antwort unten, dein Projekt gleich danach den Aufruf.",
+  "Pass on your project's answer": "Antwort deines Projekts zurückgeben",
+  "The sender then waits for your project (up to 20 seconds). GitHub, Stripe and others count a slow answer as a failure – leave it off unless you need the real answer.": "Der Absender wartet dann auf dein Projekt (bis zu 20 Sekunden). GitHub, Stripe und andere werten eine langsame Antwort als Fehler – lass es aus, wenn du die echte Antwort nicht brauchst.",
+  "The secret from the sender's webhook settings. Stored encrypted on this PC.": "Das Geheimnis aus den Webhook-Einstellungen des Absenders. Wird verschlüsselt auf diesem PC gespeichert.",
+  "Public address as Twilio knows it": "Öffentliche Adresse, wie Twilio sie kennt",
+  "Twilio signs the full address. Empty = the address the call came in on.": "Twilio signiert die vollständige Adresse. Leer = die Adresse, über die der Aufruf kam.",
+  "Public key": "Öffentlicher Schlüssel",
+  "Public key of your Discord app (64 hex characters)": "Öffentlicher Schlüssel deiner Discord-App (64 Hex-Zeichen)",
+  "Auth token of your Twilio account": "Auth-Token deines Twilio-Kontos",
+  "Enter a path, e.g. /stripe": "Gib einen Pfad ein, z. B. /stripe",
+  "New path": "Neuer Pfad",
+  "Edit path": "Pfad bearbeiten",
+  "Back": "Zurück",
+  "Apply": "Übernehmen",
+  "Path": "Pfad",
+  "Calls to this path and everything below it, e.g. /stripe → /stripe/…": "Aufrufe an diesen Pfad und alles darunter, z. B. /stripe → /stripe/…",
+  "Name (optional)": "Name (optional)",
+  "Shop payments": "Zahlungen im Shop",
+  "For all other paths": "Für alle anderen Pfade",
+  "Own paths": "Eigene Pfade",
+  "Several senders on one inbox: each path gets its own answer, forwarding and signature check – e.g. /stripe for payments and /github for pushes.": "Mehrere Absender in einem Postfach: Jeder Pfad bekommt eigene Antwort, Weiterleitung und Signaturprüfung – z. B. /stripe für Zahlungen und /github für Pushes.",
+  "Add path": "Pfad hinzufügen",
+  "Forwards": "Leitet weiter",
+  "Remove path": "Pfad entfernen",
+  "No own paths – every call gets the answer above.": "Keine eigenen Pfade – jeder Aufruf bekommt die Antwort oben.",
+  "Login headers are stored encrypted and only sent again when forwarding or replaying.": "Anmelde-Kopfzeilen werden verschlüsselt gespeichert und nur beim Weiterleiten oder erneuten Abspielen wieder mitgeschickt.",
+  "Search path or event …": "Pfad oder Ereignis suchen …",
+  "Search calls": "Aufrufe durchsuchen",
+  "Event": "Ereignis",
+  "All events": "Alle Ereignisse",
+  "No call matches the filter.": "Kein Aufruf passt zum Filter.",
+  "Shopify": "Shopify",
+  "Slack": "Slack",
+  "Twilio": "Twilio",
+  "Discord": "Discord",
+  "Header X-Shopify-Hmac-Sha256 is missing": "Kopfzeile X-Shopify-Hmac-Sha256 fehlt",
+  "Shopify signature is valid": "Shopify-Signatur ist gültig",
+  "Shopify signature does not match": "Shopify-Signatur passt nicht",
+  "Header X-Slack-Signature or X-Slack-Request-Timestamp is missing": "Kopfzeile X-Slack-Signature oder X-Slack-Request-Timestamp fehlt",
+  "Slack signature is valid": "Slack-Signatur ist gültig",
+  "Slack signature does not match": "Slack-Signatur passt nicht",
+  "Header X-Twilio-Signature is missing": "Kopfzeile X-Twilio-Signature fehlt",
+  "Twilio signature is valid": "Twilio-Signatur ist gültig",
+  "Twilio signature does not match – is the public address right?": "Twilio-Signatur passt nicht – stimmt die öffentliche Adresse?",
+  "Header X-Signature-Ed25519 or X-Signature-Timestamp is missing": "Kopfzeile X-Signature-Ed25519 oder X-Signature-Timestamp fehlt",
+  "Discord signature is valid": "Discord-Signatur ist gültig",
+  "Discord signature does not match": "Discord-Signatur passt nicht",
+  "The Discord public key is not valid (64 hex characters)": "Der öffentliche Discord-Schlüssel ist ungültig (64 Hex-Zeichen)",
+  "A path starts with / and has letters, digits, - _ . ~ – e.g. /stripe": "Ein Pfad beginnt mit / und enthält Buchstaben, Ziffern, - _ . ~ – z. B. /stripe",
+  "$patterns": [
+    [
+      "Headers ({})",
+      "Kopfzeilen ({})"
+    ],
+    [
+      "Send a webhook to {}/your-path – it shows up here at once.",
+      "Schicke einen Webhook an {}/dein-pfad – er erscheint sofort hier."
+    ],
+    [
+      "{} copied",
+      "{} kopiert"
+    ],
+    [
+      "Forwarded to {}: {}",
+      "Weitergeleitet an {}: {}"
+    ],
+    [
+      "Header {} is missing",
+      "Kopfzeile {} fehlt"
+    ],
+    [
+      "Port {} is in use – choose another one.",
+      "Port {} ist belegt – bitte einen anderen wählen."
+    ],
+    [
+      "Being forwarded to {} …",
+      "Wird an {} weitergeleitet …"
+    ],
+    [
+      "Two paths are the same: {}",
+      "Zwei Pfade sind gleich: {}"
+    ],
+    [
+      "Edit path {}",
+      "Pfad {} bearbeiten"
+    ],
+    [
+      "Remove path {}",
+      "Pfad {} entfernen"
+    ]
+  ]
 }

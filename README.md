@@ -2,7 +2,7 @@
 
 # Webhook inbox
 
-An address for the webhooks of Stripe, GitHub, PayPal & co. – public through Hostwerk's tunnel if you like. Every call with headers and body, check signatures, forward to your project or replay.
+An address for the webhooks of Stripe, GitHub, Shopify, Slack & co. – public through Hostwerk's tunnel if you like. Every call with headers and body, check signatures, forward to your project or replay.
 
 [Deutsch](README.de.md) · An official [Hostwerk](https://github.com/Passimoritz/hostwerk-public) extension (SDK 2.7, native extension)
 
@@ -12,10 +12,12 @@ An address for the webhooks of Stripe, GitHub, PayPal & co. – public through H
 
 - A local receiver (port of your choice) – public with one click through Hostwerk's tunnel, closed again by emergency mode
 - A fixed address with your own domain (Live → Remote access) that never changes – signatures stay valid
-- Every call with method, path, headers and body; JSON shown readably
-- Signature check for GitHub, Stripe and any HMAC header
-- Forward each call to your project and see its answer – or replay a stored call later
-- Answer of your choice (status, body) so the sender is happy
+- Every call with method, path, headers and body; JSON shown readably; search and filter by event
+- Signature check for GitHub, Stripe, Shopify, Slack, Twilio, Discord and any HMAC header
+- **Several paths** (e.g. `/stripe` and `/github`), each with its own answer, forwarding and signature check
+- Forward each call to your project – the sender gets its answer **at once**, your project gets the call right after (or, if you want, your project's answer with its content type); replay stored calls later
+- Answer of your choice (status, type, body) so the sender is happy
+- **Secrets stay secret:** signature keys and login headers of stored calls (Authorization, Cookie, API keys …) are encrypted on disk and only shown as “••••••”
 
 ## Install
 
@@ -25,7 +27,7 @@ Native extensions run as part of Hostwerk (own server and interface part). That 
 
 ## Data
 
-`data/webhook-inbox` – settings and the last 200 calls. Removing the extension keeps them.
+`data/webhook-inbox` – settings and the last 200 calls; secrets in them are sealed with Hostwerk's key (older data gets sealed on the first start). Removing the extension keeps them.
 
 ## Develop
 

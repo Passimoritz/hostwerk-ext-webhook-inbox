@@ -1,3 +1,12 @@
+## 1.3.0
+
+- Security: the signature secret and the login headers of stored calls (Authorization, Cookie, API keys …) are sealed with Hostwerk's key and only shown masked; older data is sealed on the first start. / Signatur-Geheimnis und Anmelde-Kopfzeilen versiegelt.
+- Forwarding answers the sender at once and forwards right after – GitHub and Stripe no longer see a timeout. Optional "Pass on your project's answer" keeps the old behaviour, now with the project's Content-Type. / Weiterleitung antwortet sofort; Content-Type bleibt erhalten.
+- Several paths with their own answer, forwarding and signature check. / Mehrere Pfade mit eigener Antwort und Weiterleitung.
+- Search and filter calls by event. / Suche und Filter nach Ereignis.
+- More signatures: Shopify, Slack, Twilio, Discord. / Weitere Signaturen.
+- Times in Hostwerk's language, sizes from the design scale, own place in the sidebar (Develop), other extensions may add tabs. / Zeiten in Hostwerks Sprache, Design-Skala, Seitenleiste.
+
 ## 1.2.0
 
 - "Open in API tester": a received call becomes a request in the API tester (target: your forward address or the local receiver). Needs the API tester extension. / „Im API-Tester öffnen“: ein empfangener Aufruf wird zur Anfrage im API-Tester (Ziel: deine Weiterleitung bzw. der Empfänger auf diesem PC). Braucht die Erweiterung API-Tester.

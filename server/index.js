@@ -4,7 +4,8 @@
  *   GET    /api/webhook-inbox                  → { settings, running, port, public, items }
  *   GET    /api/webhook-inbox/items/:id        → one call with headers and body
  *   DELETE /api/webhook-inbox/items            → clear
- *   PUT    /api/webhook-inbox/settings         → port, answer (status, body, contentType), forward target, secret, kind
+ *   PUT    /api/webhook-inbox/settings         → port, answer (status, body, contentType), forward target, passAnswer, secret,
+ *                                                kind, routes (own answer/forwarding/signature per path)
  *   POST   /api/webhook-inbox/start | stop     → local receiver on 127.0.0.1:<port>
  *   POST   /api/webhook-inbox/share | unshare  → public address through Hostwerk's tunnel (cloudflared)
  *   POST   /api/webhook-inbox/items/:id/replay → { target } → answer of the target
@@ -22,7 +23,8 @@ let inbox = null;
 
 function activate(host) {
   const { ctx } = host;
-  inbox = new Inbox({ dir: path.join(ctx.paths.data, 'webhook-inbox'), onItem: (it) => host.broadcast({ type: 'webhook-inbox', id: it.id }) });
+  // Geheimnisse (Signatur-Schlüssel, Anmelde-Kopfzeilen gespeicherter Aufrufe) versiegelt mit Hostwerks Schlüssel
+  inbox = new Inbox({ dir: path.join(ctx.paths.data, 'webhook-inbox'), secrets: host.core('secrets'), onItem: (it) => host.broadcast({ type: 'webhook-inbox', id: it.id }) });
   const tunnelKey = () => `localhost-${inbox.cfg.port}`;
   const tunnel = () => (ctx.tunnels ? ctx.tunnels.list().find((t) => t.key === tunnelKey()) : null);
   // Feste Adresse: nur mit laufendem Fernzugriff und eigener Domain (Livebetrieb → Domains & HTTPS / Fernzugriff)
@@ -34,7 +36,7 @@ function activate(host) {
   };
   const state = () => {
     const t = tunnel();
-    return { settings: { ...inbox.cfg, secret: inbox.cfg.secret ? '••••••' : '' }, hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), fixed: fixedState(), apiTester: !!(ctx.apiTester && ctx.apiTester.addRequest), items: inbox.list() };
+    return { settings: inbox.publicSettings(), hasSecret: !!inbox.cfg.secret, running: !!inbox.server, port: inbox.port || inbox.cfg.port, public: t && t.publicUrl ? t.publicUrl : null, tunnelReady: !!(ctx.tunnels && ctx.tunnels.installed()), fixed: fixedState(), apiTester: !!(ctx.apiTester && ctx.apiTester.addRequest), items: inbox.list() };
   };
   // Was running before the restart → start again
   if (inbox.read('running', false)) inbox.start().catch((e) => host.log('start failed:', e.message));
@@ -44,7 +46,6 @@ function activate(host) {
   host.router.delete('/webhook-inbox/items', (req, res) => { inbox.clear(); res.json(state()); });
   host.router.put('/webhook-inbox/settings', async (req, res) => {
     const b = { ...(req.body || {}) };
-    if (b.secret === '••••••') delete b.secret; // unchanged
     const portBefore = inbox.cfg.port;
     inbox.settings(b);
     if (inbox.server && inbox.cfg.port !== portBefore) { await inbox.stop(); await inbox.start(); }
@@ -69,7 +70,7 @@ function activate(host) {
   host.router.post('/webhook-inbox/items/:id/to-api-tester', (req, res) => {
     const at = ctx.apiTester;
     if (!at || typeof at.addRequest !== 'function') throw host.error(409, 'Install the API tester first (Extensions → Discover).');
-    const it = inbox.get(req.params.id);
+    const it = inbox.full(req.params.id); // im eigenen API-Tester mit allen Kopfzeilen
     const base = (inbox.cfg.forward || `http://127.0.0.1:${inbox.port || inbox.cfg.port}`).replace(/\/$/, '');
     const skip = /^(host|content-length|connection|cookie|accept-encoding|x-forwarded-.*|cf-.*|transfer-encoding)$/i;
     const headers = Object.entries(it.headers || {}).filter(([k]) => !skip.test(k)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]);

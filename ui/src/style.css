@@ -1,10 +1,15 @@
 /* Webhook inbox: calls left, the selected call right */
-.whi-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+.whi-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
 @media (max-width: 900px) { .whi-grid { grid-template-columns: 1fr; } }
 .whi-list { overflow: hidden; }
-.whi-item { background: none; border: 0; width: 100%; text-align: left; font: inherit; color: var(--text); cursor: pointer; gap: 8px; }
+.whi-item { background: none; border: 0; width: 100%; text-align: left; font: inherit; color: var(--text); cursor: pointer; gap: var(--sp-2); }
 .whi-item.active { background: var(--accent-soft); }
 .whi-addr { flex-wrap: wrap; }
 .whi-addr code { min-width: 0; }
-.whi-pre { max-height: 480px; white-space: pre-wrap; word-break: break-word; }
+.whi-pre { max-height: 480px; /* Platz für einen typischen Webhook-Inhalt */ white-space: pre-wrap; word-break: break-word; }
 .whi-break { word-break: break-all; }
+.whi-filter { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+.whi-none { padding: var(--sp-3); }
+.whi-sub { font-size: var(--fs-md); margin: var(--sp-2) 0 0; }
+.whi-check { min-height: 24px; }
+.whi-routes .list-item { gap: var(--sp-2); }

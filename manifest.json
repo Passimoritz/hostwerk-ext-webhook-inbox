@@ -6,10 +6,10 @@
     "en": "Webhook inbox"
   },
   "description": {
-    "de": "Eine Adresse, an die Stripe, GitHub, PayPal & Co. ihre Webhooks schicken – auf Wunsch öffentlich über Hostwerks Tunnel. Jeder Aufruf mit Kopfzeilen und Inhalt, Signaturen prüfen, an dein Projekt weiterleiten oder erneut abspielen.",
-    "en": "An address for the webhooks of Stripe, GitHub, PayPal & co. – public through Hostwerk's tunnel if you like. Every call with headers and body, check signatures, forward to your project or replay."
+    "de": "Eine Adresse, an die Stripe, GitHub, Shopify, Slack & Co. ihre Webhooks schicken – auf Wunsch öffentlich über Hostwerks Tunnel. Jeder Aufruf mit Kopfzeilen und Inhalt, Signaturen prüfen, mehrere Pfade mit eigener Antwort, an dein Projekt weiterleiten oder erneut abspielen.",
+    "en": "An address for the webhooks of Stripe, GitHub, Shopify, Slack & co. – public through Hostwerk's tunnel if you like. Every call with headers and body, check signatures, several paths with their own answer, forward to your project or replay."
   },
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Hostwerk",
   "homepage": "https://github.com/Passimoritz/hostwerk-ext-webhook-inbox",
   "license": "MIT",
@@ -30,7 +30,10 @@
       "de": "Webhooks empfangen, ansehen und weitergeben.",
       "en": "Receive, inspect and pass on webhooks."
     },
-    "icon": "inbox"
+    "icon": "inbox",
+    "nav": {
+      "group": "develop"
+    }
   },
   "backend": "server/index.js",
   "ui": "ui/index.js",
@@ -49,5 +52,10 @@
   ],
   "uses": [
     "apiTester"
-  ]
+  ],
+  "allowExtensions": {
+    "*": [
+      "tabs"
+    ]
+  }
 }
