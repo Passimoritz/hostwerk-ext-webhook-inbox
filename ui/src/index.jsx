@@ -176,7 +176,7 @@ function WebhookInboxPage() {
           <div className="row-tight whi-addr">
             <Link2 size={14} className="muted" />
             {s.fixed && s.fixed.url ? (<><span className="small muted">Fixed:</span><code className="ellipsis">{`${s.fixed.url}/…`}</code><button type="button" className="btn ghost xs icon" title="Copy" aria-label="Copy" onClick={() => copy(s.fixed.url, 'Address')}><Copy size={12} /></button><Btn className="sm ghost" icon={RefreshCw} onClick={() => fixed(true, true)}>New address</Btn><Btn className="sm ghost" onClick={() => fixed(false)}>Turn off</Btn></>)
-              : s.fixed && s.fixed.on ? (<><span className="small c-warn grow">The fixed address needs remote access with your own domain – set it up under Live → Domains &amp; HTTPS and Remote access.</span><a className="btn sm" href="#/live/fernzugriff">Open Live</a><Btn className="sm ghost" onClick={() => fixed(false)}>Turn off</Btn></>)
+              : s.fixed && s.fixed.on ? (<><span className="small c-warn grow">The fixed address needs remote access with your own domain – set it up under Live → Domains &amp; HTTPS and Remote access.</span><a className="btn sm" href="#/live/zugriff/fernzugriff">Open Live</a><Btn className="sm ghost" onClick={() => fixed(false)}>Turn off</Btn></>)
                 : (<><span className="small muted grow">With your own domain (Live → Remote access) the inbox gets an address that never changes – nice for GitHub, Stripe &amp; Co.</span><Btn className="sm" icon={Link2} onClick={() => fixed(true)}>Fixed address</Btn></>)}
           </div>
           {s.settings.forward && <div className="small muted row-tight"><ArrowRight size={13} />Every call goes on to <code>{s.settings.forward}</code></div>}
