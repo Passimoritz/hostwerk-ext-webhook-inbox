@@ -27,7 +27,7 @@ function activate(host) {
   inbox = new Inbox({ dir: path.join(ctx.paths.data, 'webhook-inbox'), secrets: host.core('secrets'), onItem: (it) => host.broadcast({ type: 'webhook-inbox', id: it.id }) });
   const tunnelKey = () => `localhost-${inbox.cfg.port}`;
   const tunnel = () => (ctx.tunnels ? ctx.tunnels.list().find((t) => t.key === tunnelKey()) : null);
-  // Feste Adresse: nur mit laufendem Fernzugriff und eigener Domain (Livebetrieb → Domains & HTTPS / Fernzugriff)
+  // Feste Adresse: nur mit laufendem Fernzugriff und eigener Domain (Livebetrieb → Online → Adressen / Zugriff → Fernzugriff)
   const fixedState = () => {
     const tok = inbox.read('fixed', null);
     const r = ctx.remote && ctx.remote.status ? ctx.remote.status() : null;
@@ -58,7 +58,7 @@ function activate(host) {
   });
   host.router.post('/webhook-inbox/share', async (req, res) => {
     if (!ctx.tunnels) throw host.error(409, 'Sharing is not available in this Hostwerk.');
-    if (!ctx.tunnels.installed()) throw host.error(409, 'The tunnel program is not installed yet – set it up under Live → Share.');
+    if (!ctx.tunnels.installed()) throw host.error(409, 'The tunnel program is not installed yet – set it up under Go live → Online.');
     if (!inbox.server) { await inbox.start(); inbox.write('running', true); }
     await ctx.tunnels.start({ port: inbox.cfg.port, label: host.t('Webhook inbox') });
     res.json(state());

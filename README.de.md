@@ -12,7 +12,7 @@ Eine Adresse, an die Stripe, GitHub, Shopify, Slack & Co. ihre Webhooks schicken
 
 - **Wo:** Projekte → Webhooks – seit 1.4.0 ohne eigenen Seitenleisten-Eintrag; die ganze Seite bleibt unter Erweiterungen → Öffnen
 - Ein Empfänger auf diesem PC (Port frei wählbar) – mit einem Klick öffentlich über Hostwerks Tunnel, der Notfall-Modus schließt ihn mit
-- Eine feste Adresse mit eigener Domain (Livebetrieb → Fernzugriff), die sich nie ändert – Signaturen bleiben gültig
+- Eine feste Adresse mit eigener Domain (Livebetrieb → Zugriff → Fernzugriff), die sich nie ändert – Signaturen bleiben gültig
 - Jeder Aufruf mit Methode, Pfad, Kopfzeilen und Inhalt; JSON lesbar; Suche und Filter nach Ereignis
 - Signatur-Prüfung für GitHub, Stripe, Shopify, Slack, Twilio, Discord und beliebige HMAC-Kopfzeilen
 - **Mehrere Pfade** (z. B. `/stripe` und `/github`), jeder mit eigener Antwort, Weiterleitung und Signaturprüfung
