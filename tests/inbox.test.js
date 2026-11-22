@@ -6,7 +6,8 @@ const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { Inbox, verify, sendTo, matchRoute, eventOf, MASK } = require('../server/inbox');
+const { Inbox, verify, sendTo, matchRoute, eventOf, publicUrl, trimItems, MASK, MAX_TOTAL, HARD_LIMIT } = require('../server/inbox');
+const { toCurl } = require('../ui/src/curl');
 const de = require('../locales/de.json');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'whi-'));
@@ -58,7 +59,12 @@ test('signatures: GitHub, Stripe, HMAC header (hex and base64)', () => {
   assert.strictEqual(verify(gh, 's3', 'github').ok, true); assert.strictEqual(verify(gh, 'wrong', 'github').ok, false);
   const t = 1700000000;
   const st = { headers: { 'stripe-signature': `t=${t},v1=${crypto.createHmac('sha256', 'whsec_x').update(`${t}.${body}`).digest('hex')}` }, body };
-  assert.strictEqual(verify(st, 'whsec_x', 'stripe').ok, true); assert.strictEqual(verify({ headers: {}, body }, 'whsec_x', 'stripe').ok, false);
+  const at = { now: (t + 60) * 1000 }; // eine Minute nach dem Signieren
+  assert.strictEqual(verify(st, 'whsec_x', 'stripe', at).ok, true); assert.strictEqual(verify({ headers: {}, body }, 'whsec_x', 'stripe', at).ok, false);
+  // Zeitfenster: 5 Minuten – ein älterer (wiederholter) Aufruf gilt nicht, mit eigenem Hinweis
+  const late = verify(st, 'whsec_x', 'stripe', { now: (t + 301) * 1000 });
+  assert.strictEqual(late.ok, false); assert.ok(late.old); assert.match(late.why, /5 minutes/);
+  assert.strictEqual(verify(st, 'whsec_x', 'stripe', { now: (t - 200) * 1000 }).ok, true, 'small clock skew is fine');
   const b64 = { headers: { 'x-shopify-hmac-sha256': crypto.createHmac('sha256', 'k').update(body).digest('base64') }, body };
   assert.strictEqual(verify(b64, 'k', 'hmac', { header: 'X-Shopify-Hmac-Sha256' }).ok, true);
   assert.strictEqual(verify(gh, '', 'github').ok, null);
@@ -172,7 +178,9 @@ test('more signatures: Shopify, Slack, Twilio, Discord', () => {
   assert.strictEqual(verify(sh, 'shp', 'shopify').ok, true); assert.strictEqual(verify(sh, 'x', 'shopify').ok, false);
   const ts = '1700000000';
   const sl = { headers: { 'x-slack-request-timestamp': ts, 'x-slack-signature': 'v0=' + crypto.createHmac('sha256', 'slk').update('v0:' + ts + ':' + body).digest('hex') }, body };
-  assert.strictEqual(verify(sl, 'slk', 'slack').ok, true); assert.strictEqual(verify({ headers: {}, body }, 'slk', 'slack').ok, false);
+  assert.strictEqual(verify(sl, 'slk', 'slack', { now: Number(ts) * 1000 }).ok, true); assert.strictEqual(verify({ headers: {}, body }, 'slk', 'slack').ok, false);
+  const slOld = verify(sl, 'slk', 'slack', { now: (Number(ts) + 3600) * 1000 }); assert.strictEqual(slOld.ok, false); assert.ok(slOld.old);
+  assert.strictEqual(verify({ ...sl, headers: { ...sl.headers, 'x-slack-signature': 'v0=00' } }, 'slk', 'slack', { now: Number(ts) * 1000 }).old, undefined, 'wrong signature is not "old"');
   const form = 'To=%2B49&From=%2B1&Body=Hi';
   const url = 'https://example.com/sms';
   const twSig = crypto.createHmac('sha1', 'tw').update(url + 'BodyHiFrom+1To+49').digest('base64');
@@ -195,4 +203,134 @@ test('events for filtering: GitHub, Shopify, Stripe, Slack, Discord', () => {
   assert.strictEqual(eventOf({}, '{"type":"event_callback","event":{"type":"app_mention"}}'), 'app_mention');
   assert.strictEqual(eventOf({}, '{"type":1}'), '1');
   assert.strictEqual(eventOf({}, 'not json'), null);
+});
+
+test('forwarding drops hop-by-hop headers (Expect, Keep-Alive …) – fetch would refuse them', async () => {
+  const seen = [];
+  const fetchFn = async (url, opts) => { seen.push(opts.headers); return new Response('ok', { status: 200 }); };
+  const r = await sendTo({ method: 'POST', path: '/h', headers: { expect: '100-continue', 'keep-alive': 'timeout=5', upgrade: 'h2c', te: 'trailers', connection: 'keep-alive', 'x-keep': '1' }, body: '{}' }, 'http://127.0.0.1:9/x', { fetchFn });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(Object.keys(seen[0]), ['x-keep']);
+});
+
+test('settings: addresses are trimmed and must be complete; more than 20 paths are refused, not cut', () => {
+  const box = new Inbox({ dir: tmp() });
+  box.settings({ forward: '  http://localhost:8080/hook ' }); assert.strictEqual(box.cfg.forward, 'http://localhost:8080/hook');
+  assert.throws(() => box.settings({ forward: 'http://' }), /Invalid target/);
+  assert.throws(() => box.settings({ routes: Array.from({ length: 21 }, (_, i) => ({ path: `/p${i}` })) }), /At most 20/);
+  assert.match(de.$patterns.map((p) => p[0]).join('|'), /At most \{\} own paths\./);
+});
+
+test('event is taken once on arrival, a path with // stays a path, calls reach the disk on stop', async () => {
+  const box = new Inbox({ dir: tmp() }); box.settings({ port: await freePort() });
+  await box.start();
+  await new Promise((resolve) => { const q = http.request({ host: '127.0.0.1', port: box.port, method: 'POST', path: '//double/slash?x=1', headers: { 'content-type': 'application/json' } }, (res) => { res.resume(); res.on('end', resolve); }); q.end('{"type":"invoice.paid"}'); });
+  const it = box.items[0];
+  assert.strictEqual(it.event, 'invoice.paid'); assert.strictEqual(it.path, '//double/slash'); assert.strictEqual(it.query, 'x=1');
+  await box.stop();
+  assert.strictEqual(new Inbox({ dir: box.dir }).list()[0].event, 'invoice.paid');
+});
+
+test('a large body keeps exactly the first 1 MB; its signature is reported as not checkable, not as wrong', async () => {
+  const box = new Inbox({ dir: tmp() }); box.settings({ port: await freePort(), kind: 'github', secret: 's' });
+  await box.start();
+  const body = Buffer.alloc(2.5 * 1024 * 1024, 'a');
+  const sig = `sha256=${crypto.createHmac('sha256', 's').update(body).digest('hex')}`;
+  await fetch(`http://127.0.0.1:${box.port}/big`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-hub-signature-256': sig }, body });
+  await box.stop();
+  const it = box.items[0];
+  assert.strictEqual(it.cut, true); assert.strictEqual(it.size, body.length); assert.strictEqual(it.body.length, 1024 * 1024);
+  assert.strictEqual(it.verified.ok, null); assert.match(it.verified.why, /cut at 1 MB/);
+  assert.ok(de[it.verified.why]);
+});
+
+test('public address for Twilio: the fixed address passes its prefix on, odd prefixes are ignored', () => {
+  const it = { path: '/sms', query: 'a=1', headers: { host: '127.0.0.1:18780', 'x-forwarded-host': 'hooks.example.org', 'x-forwarded-proto': 'https', 'x-forwarded-prefix': '/api/webhook-inbox/in/abc123' } };
+  assert.strictEqual(publicUrl(it), 'https://hooks.example.org/api/webhook-inbox/in/abc123/sms?a=1');
+  assert.strictEqual(publicUrl({ ...it, headers: { ...it.headers, 'x-forwarded-prefix': 'javascript:x' } }), 'https://hooks.example.org/sms?a=1');
+  assert.strictEqual(publicUrl({ path: '/sms', headers: { host: 'localhost:18780' } }), 'http://localhost:18780/sms');
+});
+
+test('total limit: the oldest calls go once all together would pass the limit; the newest always stays', () => {
+  const mk = (i, n) => ({ id: `i${i}`, body: 'x'.repeat(n), headers: {} });
+  const list = Array.from({ length: 10 }, (_, i) => mk(i, 1000));
+  assert.strictEqual(trimItems(list, 200, 3500).length, 2, 'only what fits (with header overhead)');
+  assert.strictEqual(trimItems(list, 5, 1e9).length, 5, 'count limit still applies');
+  assert.strictEqual(trimItems([mk(0, 5000)], 200, 100).length, 1, 'a single big call stays');
+  assert.ok(MAX_TOTAL >= 10 * 1024 * 1024);
+});
+
+test('total limit is applied when storing and when an old, oversized list is loaded', () => {
+  const dir = tmp();
+  const big = Array.from({ length: 80 }, (_, i) => ({ id: `o${i}`, t: i, method: 'POST', path: '/x', headers: {}, body: 'a'.repeat(1024 * 1024) }));
+  fs.writeFileSync(path.join(dir, 'items.json'), JSON.stringify(big));
+  const box = new Inbox({ dir });
+  assert.ok(box.items.length < 80 && box.items.length >= 40, `trimmed to ${box.items.length}`);
+  assert.strictEqual(box.items[0].id, 'o0', 'newest (first) kept');
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'items.json'), 'utf8')).length === box.items.length, 'written back');
+});
+
+test('remove one call; unknown id is 404', () => {
+  const box = new Inbox({ dir: tmp() });
+  box.items = [{ id: 'a', headers: {} }, { id: 'b', headers: {} }];
+  box.remove('a'); assert.deepStrictEqual(box.items.map((x) => x.id), ['b']);
+  assert.throws(() => box.remove('zz'), (e) => e.status === 404);
+  box.flush();
+});
+
+test('reject invalid signatures with 401 (option); valid ones get the normal answer and are forwarded', async () => {
+  const seen = [];
+  const app = http.createServer((q, res) => { q.resume(); q.on('end', () => { seen.push(q.url); res.end('ok'); }); });
+  const ap = await freePort(); await new Promise((r) => app.listen(ap, '127.0.0.1', r));
+  const box = new Inbox({ dir: tmp() }); box.settings({ port: await freePort(), kind: 'github', secret: 's3', rejectInvalid: true, forward: `http://127.0.0.1:${ap}/hook` });
+  await box.start();
+  try {
+    const bad = await fetch(`http://127.0.0.1:${box.port}/gh`, { method: 'POST', headers: { 'x-hub-signature-256': 'sha256=00' }, body: '{}' });
+    assert.strictEqual(bad.status, 401);
+    const sig = `sha256=${crypto.createHmac('sha256', 's3').update('{}').digest('hex')}`;
+    const good = await fetch(`http://127.0.0.1:${box.port}/gh`, { method: 'POST', headers: { 'x-hub-signature-256': sig }, body: '{}' });
+    assert.strictEqual(good.status, 200);
+    await waitFor(() => seen.length === 1);
+    assert.strictEqual(box.items.length, 2); assert.strictEqual(box.items[1].answered, 401, 'rejected call is still stored');
+    assert.strictEqual(box.items[1].forwarded, undefined, 'and not forwarded');
+    box.settings({ rejectInvalid: false }); assert.strictEqual(box.cfg.rejectInvalid, false);
+  } finally { await box.stop(); app.close(); }
+});
+
+test('endless stream: stops at the hard limit with 413 instead of reading everything', async () => {
+  const box = new Inbox({ dir: tmp() }); box.settings({ port: await freePort() });
+  await box.start();
+  try {
+    // laut Kopfzeile zu groß → sofort 413
+    const r1 = await new Promise((resolve) => { const q = http.request({ host: '127.0.0.1', port: box.port, method: 'POST', path: '/big', headers: { 'content-length': String(HARD_LIMIT + 1) } }, (res) => { res.resume(); resolve(res.statusCode); }); q.on('error', () => resolve('err')); q.write('x'); });
+    assert.strictEqual(r1, 413);
+    // ohne Länge (chunked), endlos → 413, sobald die Grenze erreicht ist
+    let sent = 0;
+    const r2 = await new Promise((resolve) => {
+      const q = http.request({ host: '127.0.0.1', port: box.port, method: 'POST', path: '/stream' }, (res) => { res.resume(); resolve(res.statusCode); q.destroy(); });
+      q.on('error', () => resolve('reset')); // der Empfänger schließt die Verbindung – je nach Zeitpunkt sieht der Absender 413 oder einen Abbruch
+      const chunk = Buffer.alloc(256 * 1024, 'b');
+      const pump = () => { while (sent < 64 * 1024 * 1024) { sent += chunk.length; if (!q.write(chunk)) { q.once('drain', pump); return; } } };
+      pump();
+    });
+    assert.ok(r2 === 413 || r2 === 'reset', String(r2));
+    assert.ok(sent < 64 * 1024 * 1024, `stopped early (${sent} bytes sent)`);
+    await waitFor(() => box.items.length === 2);
+    assert.ok(box.items.every((it) => it.tooLarge && it.answered === 413));
+  } finally { await box.stop(); }
+});
+
+test('curl command: method, url, headers (without masked logins and hop headers), body quoted for the shell', () => {
+  const c = toCurl({ method: 'POST', path: '/hook', query: 'a=1', headers: { 'content-type': 'application/json', authorization: MASK, host: 'x', 'x-note': "it's" }, body: '{"a":"b\'c"}' }, 'http://localhost:8080/');
+  assert.ok(c.startsWith("curl -X POST 'http://localhost:8080/hook?a=1'"));
+  assert.ok(c.includes("-H 'content-type: application/json'"));
+  assert.ok(!c.includes('authorization') && !c.includes("-H 'host:"));
+  assert.ok(c.includes("-H 'x-note: it'\\''s'"));
+  assert.ok(c.endsWith(`--data-binary '{"a":"b'\\''c"}'`));
+  assert.ok(!toCurl({ method: 'GET', path: '/', headers: {}, body: 'x' }, 'http://h').includes('--data'));
+  assert.ok(toCurl({ method: 'POST', path: '/a', headers: {} }, 'http://localhost:8080/webhook').includes("'http://localhost:8080/webhook'"), 'target with own path is used as is');
+});
+
+test('new messages have German', () => {
+  for (const s of ['Stripe signature matches, but its timestamp is more than 5 minutes off – a replayed call?', 'Slack signature matches, but its timestamp is more than 5 minutes off – a replayed call?', 'Call not found']) assert.ok(de[s], s);
 });

@@ -101,6 +101,8 @@
   "Shop payments": "Zahlungen im Shop",
   "For all other paths": "Für alle anderen Pfade",
   "Own paths": "Eigene Pfade",
+  "Own paths:": "Eigene Pfade:",
+  "· cut at 1 MB": "· bei 1 MB abgeschnitten",
   "Several senders on one inbox: each path gets its own answer, forwarding and signature check – e.g. /stripe for payments and /github for pushes.": "Mehrere Absender in einem Postfach: Jeder Pfad bekommt eigene Antwort, Weiterleitung und Signaturprüfung – z. B. /stripe für Zahlungen und /github für Pushes.",
   "Add path": "Pfad hinzufügen",
   "Forwards": "Leitet weiter",
@@ -130,6 +132,7 @@
   "Discord signature does not match": "Discord-Signatur passt nicht",
   "The Discord public key is not valid (64 hex characters)": "Der öffentliche Discord-Schlüssel ist ungültig (64 Hex-Zeichen)",
   "A path starts with / and has letters, digits, - _ . ~ – e.g. /stripe": "Ein Pfad beginnt mit / und enthält Buchstaben, Ziffern, - _ . ~ – z. B. /stripe",
+  "Body was cut at 1 MB – the signature cannot be checked": "Inhalt bei 1 MB abgeschnitten – die Signatur lässt sich nicht prüfen",
   "$patterns": [
     [
       "Headers ({})",
@@ -170,7 +173,22 @@
     [
       "Remove path {}",
       "Pfad {} entfernen"
+    ],
+    [
+      "At most {} own paths.",
+      "Höchstens {} eigene Pfade."
     ]
   ],
-  "Webhooks": "Webhooks"
+  "Webhooks": "Webhooks",
+  "Reject invalid signatures (401)": "Ungültige Signatur abweisen (401)",
+  "Calls with a wrong or too old signature get 401 and are not forwarded – the sender sees the error at once. They still show up here.": "Aufrufe mit falscher oder zu alter Signatur bekommen 401 und werden nicht weitergeleitet – der Absender sieht den Fehler sofort. Hier erscheinen sie trotzdem.",
+  "Rejected with 401 – not forwarded.": "Mit 401 abgewiesen – nicht weitergeleitet.",
+  "Too large – the receiver stopped reading at 8 MB and answered 413.": "Zu groß – der Empfänger hat bei 8 MB aufgehört zu lesen und mit 413 geantwortet.",
+  "Copy body": "Inhalt kopieren",
+  "Copy as curl": "Als curl kopieren",
+  "Login headers are left out – add them yourself.": "Anmelde-Kopfzeilen fehlen – trage sie selbst ein.",
+  "Delete this call": "Diesen Aufruf löschen",
+  "curl command": "curl-Befehl",
+  "Stripe signature matches, but its timestamp is more than 5 minutes off – a replayed call?": "Stripe-Signatur passt, aber ihr Zeitstempel liegt mehr als 5 Minuten daneben – ein wiederholter Aufruf?",
+  "Slack signature matches, but its timestamp is more than 5 minutes off – a replayed call?": "Slack-Signatur passt, aber ihr Zeitstempel liegt mehr als 5 Minuten daneben – ein wiederholter Aufruf?"
 }

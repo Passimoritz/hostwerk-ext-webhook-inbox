@@ -14,11 +14,20 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_BODY = 1024 * 1024; // larger bodies are cut (webhooks are small)
+/** Above this the receiver stops reading and answers 413 – an endless stream must not keep Hostwerk busy. */
+const HARD_LIMIT = 8 * 1024 * 1024;
 const KEEP = 200;
+/** All stored calls together at most ~50 MB (the oldest go first) – the list lies in memory and is written as one file. */
+const MAX_TOTAL = 50 * 1024 * 1024;
+/** Stripe and Slack sign a timestamp: older (or newer) than 5 minutes counts as a replay. */
+const MAX_AGE = 5 * 60;
 const MASK = '••••••';
 const KINDS = ['github', 'stripe', 'shopify', 'slack', 'twilio', 'discord', 'hmac'];
 /** Headers that carry logins – stored sealed, shown masked. */
 const SENSITIVE = /^(authorization|proxy-authorization|cookie|x-api-key|api-key|apikey|x-auth-token|x-access-token|x-csrf-token)$/i;
+/** Hop-by-hop headers of the sender's connection – never passed on (fetch rejects Expect, Keep-Alive and Upgrade). */
+const HOP = ['host', 'content-length', 'connection', 'transfer-encoding', 'accept-encoding', 'expect', 'keep-alive', 'upgrade', 'te', 'trailer', 'proxy-connection', 'http2-settings'];
+const MAX_ROUTES = 20;
 /** Without Hostwerk (tests, own scripts): no sealing – sensitive headers are then dropped instead of stored. */
 const NO_SEAL = { seal: null, open: (v) => v };
 /** Ed25519 public key (32 bytes, hex) → KeyObject (Discord signs its interactions with Ed25519). */
@@ -30,6 +39,9 @@ const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex');
  */
 function verify(item, secret, kind, opts = {}) {
   if (!secret) return { ok: null, why: 'No secret set' };
+  const now = opts.now !== undefined ? opts.now : Date.now();
+  /** Zeitstempel (Sekunden) innerhalb von 5 Minuten um jetzt? */
+  const fresh = (ts) => Number.isFinite(Number(ts)) && Math.abs(now / 1000 - Number(ts)) <= MAX_AGE;
   const raw = Buffer.from(item.body || '', item.base64 ? 'base64' : 'utf8');
   const h = (n) => item.headers[String(n).toLowerCase()];
   const same = (a, b) => { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
@@ -45,7 +57,8 @@ function verify(item, secret, kind, opts = {}) {
     if (!parts.t || !sig.includes('v1=')) return { ok: false, why: 'Stripe-Signature is incomplete' };
     const want = hmac('sha256', `${parts.t}.${raw.toString('utf8')}`).digest('hex');
     const v1s = sig.split(',').filter((p) => p.trim().startsWith('v1=')).map((p) => p.trim().slice(3));
-    return v1s.some((v) => same(v, want)) ? { ok: true, why: 'Stripe signature is valid' } : { ok: false, why: 'Stripe signature does not match' };
+    if (!v1s.some((v) => same(v, want))) return { ok: false, why: 'Stripe signature does not match' };
+    return fresh(parts.t) ? { ok: true, why: 'Stripe signature is valid' } : { ok: false, old: true, why: 'Stripe signature matches, but its timestamp is more than 5 minutes off – a replayed call?' };
   }
   if (kind === 'shopify') {
     const sig = h('x-shopify-hmac-sha256'); if (!sig) return { ok: false, why: 'Header X-Shopify-Hmac-Sha256 is missing' };
@@ -55,7 +68,8 @@ function verify(item, secret, kind, opts = {}) {
     const sig = h('x-slack-signature'); const ts = h('x-slack-request-timestamp');
     if (!sig || !ts) return { ok: false, why: 'Header X-Slack-Signature or X-Slack-Request-Timestamp is missing' };
     const want = `v0=${hmac('sha256', `v0:${ts}:${raw.toString('utf8')}`).digest('hex')}`;
-    return same(sig, want) ? { ok: true, why: 'Slack signature is valid' } : { ok: false, why: 'Slack signature does not match' };
+    if (!same(sig, want)) return { ok: false, why: 'Slack signature does not match' };
+    return fresh(ts) ? { ok: true, why: 'Slack signature is valid' } : { ok: false, old: true, why: 'Slack signature matches, but its timestamp is more than 5 minutes off – a replayed call?' };
   }
   if (kind === 'twilio') {
     const sig = h('x-twilio-signature'); if (!sig) return { ok: false, why: 'Header X-Twilio-Signature is missing' };
@@ -88,7 +102,9 @@ function publicUrl(item) {
   const hd = item.headers || {};
   const host = hd['x-forwarded-host'] || hd.host || 'localhost';
   const proto = hd['x-forwarded-proto'] || (/^(localhost|127\.)/.test(host) ? 'http' : 'https');
-  return `${proto}://${host}${item.path || '/'}${item.query ? `?${item.query}` : ''}`;
+  // Feste Adresse: Hostwerk reicht den Vorspann /api/webhook-inbox/in/<token> mit (x-forwarded-prefix)
+  const prefix = String(hd['x-forwarded-prefix'] || '').replace(/\/+$/, '');
+  return `${proto}://${host}${/^\/[\w\-./~%]*$/.test(prefix) ? prefix : ''}${item.path || '/'}${item.query ? `?${item.query}` : ''}`;
 }
 
 /** Send a stored call to a target (http://localhost:8080/hook) → { status, ms, body, contentType } or { error } */
@@ -98,7 +114,7 @@ async function sendTo(item, target, { fetchFn = fetch, headers: extra = {} } = {
   // Target with its own path (…/stripe/webhook) is used as is; a bare address gets the path of the call
   const q = item.query ? `?${item.query}` : '';
   const finalUrl = u.pathname && u.pathname !== '/' ? `${u.origin}${u.pathname}${q}` : `${u.origin}${item.path || '/'}${q}`;
-  const headers = { ...item.headers, ...extra }; for (const k of ['host', 'content-length', 'connection', 'transfer-encoding', 'accept-encoding']) delete headers[k];
+  const headers = { ...item.headers, ...extra }; for (const k of HOP) delete headers[k];
   for (const [k, v] of Object.entries(headers)) if (v === MASK) delete headers[k]; // nie die Maske weitergeben
   const t0 = Date.now();
   try {
@@ -119,6 +135,20 @@ function matchRoute(routes, p) {
   return best;
 }
 
+/** Rough size of a stored call in bytes (body + headers). */
+const itemBytes = (it) => (it.body ? it.body.length : 0) + (it.sealed ? it.sealed.length : 0) + 300 + JSON.stringify(it.headers || {}).length;
+/** Newest first: keep at most `keep` calls and at most `max` bytes together (the newest call always stays). */
+function trimItems(items, keep = KEEP, max = MAX_TOTAL) {
+  const out = []; let total = 0;
+  for (const it of items) {
+    if (out.length >= keep) break;
+    const n = itemBytes(it);
+    if (out.length && total + n > max) break;
+    out.push(it); total += n;
+  }
+  return out;
+}
+
 /** Split headers into what may be shown and what is sealed. */
 function splitHeaders(headers) {
   const shown = {}; const hidden = {};
@@ -132,7 +162,9 @@ class Inbox {
     fs.mkdirSync(dir, { recursive: true });
     this.items = this.read('items', []);
     const saved = this.read('settings', {});
-    this.cfg = { port: 18780, status: 200, body: '{"ok":true}', contentType: 'application/json', forward: '', secret: '', kind: 'github', header: 'x-signature', url: '', passAnswer: false, ...saved, routes: [] };
+    this.cfg = { port: 18780, status: 200, body: '{"ok":true}', contentType: 'application/json', forward: '', secret: '', kind: 'github', header: 'x-signature', url: '', passAnswer: false, rejectInvalid: false, ...saved, routes: [] };
+    // Gespeicherte Aufrufe älterer Fassungen auf die Gesamtgrenze bringen
+    if (this.items.length) { const before = this.items.length; this.items = trimItems(this.items); if (this.items.length !== before) this.write('items', this.items); }
     this.cfg.secret = this.open(saved.secret);
     this.cfg.routes = (Array.isArray(saved.routes) ? saved.routes : []).map((r) => ({ ...r, secret: this.open(r.secret) }));
     // Ältere Fassungen speicherten Geheimnis und Kopfzeilen im Klartext – einmal versiegelt neu schreiben
@@ -164,10 +196,13 @@ class Inbox {
   static clean(p, base = {}) {
     const out = { ...base };
     if (p.status !== undefined) { const n = Number(p.status); if (!Number.isInteger(n) || n < 100 || n > 599) throw Object.assign(new Error('Invalid status code.'), { status: 400 }); out.status = n; }
-    for (const k of ['body', 'contentType', 'forward', 'secret', 'header', 'url']) if (typeof p[k] === 'string') out[k] = p[k].slice(0, k === 'body' ? 20000 : 500);
+    // Adressen und Namen ohne Leerzeichen am Rand (aus der Zwischenablage eingefügt); Inhalt und Geheimnis unverändert
+    for (const k of ['body', 'contentType', 'forward', 'secret', 'header', 'url']) if (typeof p[k] === 'string') out[k] = (['body', 'secret'].includes(k) ? p[k] : p[k].trim()).slice(0, k === 'body' ? 20000 : 500);
     if (KINDS.includes(p.kind)) out.kind = p.kind;
     if (typeof p.passAnswer === 'boolean') out.passAnswer = p.passAnswer;
-    if (out.forward && !/^https?:\/\//.test(out.forward)) throw Object.assign(new Error('Invalid target address'), { status: 400 });
+    if (typeof p.rejectInvalid === 'boolean') out.rejectInvalid = p.rejectInvalid;
+    const httpUrl = (s) => { try { const u = new URL(s); return /^https?:$/.test(u.protocol) && !!u.hostname; } catch { return false; } };
+    if (out.forward && !httpUrl(out.forward)) throw Object.assign(new Error('Invalid target address'), { status: 400 });
     return out;
   }
   settings(patch) {
@@ -177,15 +212,16 @@ class Inbox {
       const keep = { ...p }; if (keep.secret === MASK) delete keep.secret; // unverändert
       Object.assign(this.cfg, Inbox.clean(keep, this.cfg));
       if (Array.isArray(p.routes)) {
+        if (p.routes.length > MAX_ROUTES) throw Object.assign(new Error(`At most ${MAX_ROUTES} own paths.`), { status: 400 });
         const seen = new Set();
-        this.cfg.routes = p.routes.slice(0, 20).map((r) => {
+        this.cfg.routes = p.routes.map((r) => {
           const pth = `/${String(r.path || '').trim().replace(/^\/+/, '').replace(/\/+$/, '')}`;
           if (pth === '/' || !/^\/[\w\-./~%]+$/.test(pth)) throw Object.assign(new Error('A path starts with / and has letters, digits, - _ . ~ – e.g. /stripe'), { status: 400 });
           if (seen.has(pth)) throw Object.assign(new Error(`Two paths are the same: ${pth}`), { status: 400 });
           seen.add(pth);
           const old = this.cfg.routes.find((x) => x.id && x.id === r.id);
           const rr = { ...r }; if (rr.secret === MASK) rr.secret = old ? old.secret : '';
-          return { ...Inbox.clean(rr, { status: 200, body: '{"ok":true}', contentType: 'application/json', forward: '', secret: '', kind: 'github', header: 'x-signature', url: '', passAnswer: false }), id: old ? old.id : (typeof r.id === 'string' && /^[a-f0-9]{8}$/.test(r.id) ? r.id : crypto.randomBytes(4).toString('hex')), path: pth, name: String(r.name || '').slice(0, 60) };
+          return { ...Inbox.clean(rr, { status: 200, body: '{"ok":true}', contentType: 'application/json', forward: '', secret: '', kind: 'github', header: 'x-signature', url: '', passAnswer: false, rejectInvalid: false }), id: old ? old.id : (typeof r.id === 'string' && /^[a-f0-9]{8}$/.test(r.id) ? r.id : crypto.randomBytes(4).toString('hex')), path: pth, name: String(r.name || '').slice(0, 60) };
         });
       }
       this.saveSettings();
@@ -205,24 +241,54 @@ class Inbox {
     });
     this.server = srv; this.port = this.cfg.port;
   }
-  async stop() { if (!this.server) return; const s = this.server; this.server = null; this.port = null; await new Promise((r) => s.close(() => r())); }
-  store(item) { const i = this.items.findIndex((x) => x.id === item.id); if (i >= 0) this.items[i] = item; else { this.items.unshift(item); this.items = this.items.slice(0, KEEP); } this.write('items', this.items); try { this.onItem(item); } catch { /* egal */ } }
+  async stop() { this.flush(); if (!this.server) return; const s = this.server; this.server = null; this.port = null; await new Promise((r) => s.close(() => r())); }
+  /**
+   * Gespeicherte Aufrufe auf die Platte – gebündelt: bei vielen oder großen Aufrufen (bis 200 × 1 MB) schriebe sonst jeder
+   * Aufruf die ganze Datei neu und hielte Hostwerk an. stop()/flush() schreibt sofort.
+   */
+  saveItems() { if (this.saveTimer) return; this.saveTimer = setTimeout(() => this.flush(), 400); if (this.saveTimer.unref) this.saveTimer.unref(); }
+  flush() { if (!this.saveTimer) return; clearTimeout(this.saveTimer); this.saveTimer = null; try { this.write('items', this.items); } catch { /* nächster Versuch beim nächsten Aufruf */ } }
+  store(item) { const i = this.items.findIndex((x) => x.id === item.id); if (i >= 0) this.items[i] = item; else { this.items.unshift(item); this.items = trimItems(this.items); } this.saveItems(); try { this.onItem(item); } catch { /* egal */ } }
+  /** Remove one stored call. */
+  remove(id) { const before = this.items.length; this.items = this.items.filter((x) => x.id !== id); if (this.items.length === before) throw Object.assign(new Error('Call not found'), { status: 404 }); this.saveItems(); }
   handle(req, res) {
-    const chunks = []; let size = 0; let cut = false;
-    req.on('data', (d) => { size += d.length; if (size <= MAX_BODY) chunks.push(d); else cut = true; });
+    const chunks = []; let size = 0; let cut = false; let done = false;
+    // Viel zu groß (laut Kopfzeile oder beim Lesen): 413 und die Verbindung schließen – nicht endlos weiterlesen
+    const tooLarge = () => {
+      if (done) return; done = true;
+      res.writeHead(413, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' });
+      res.end('Payload too large');
+      req.pause(); setTimeout(() => req.destroy(), 1000).unref();
+      const u = new URL(`http://x${String(req.url).startsWith('/') ? '' : '/'}${req.url}`);
+      this.store(this.protect({ id: crypto.randomBytes(6).toString('hex'), t: Date.now(), method: req.method, path: u.pathname, query: u.search.slice(1), headers: req.headers, size, cut: true, tooLarge: true, base64: false, body: '', from: req.headers['cf-connecting-ip'] || req.socket.remoteAddress, event: null, answered: 413 }));
+    };
+    if (Number(req.headers['content-length']) > HARD_LIMIT) { size = Number(req.headers['content-length']); tooLarge(); return; }
+    // Genau das erste 1 MB behalten – auch vom Stück, das die Grenze überschreitet
+    req.on('data', (d) => { if (done) return; const room = MAX_BODY - size; size += d.length; if (room >= d.length) chunks.push(d); else { if (room > 0) chunks.push(d.subarray(0, room)); cut = true; } if (size > HARD_LIMIT) tooLarge(); });
     req.on('end', async () => {
+      if (done) return;
+      done = true;
       const buf = Buffer.concat(chunks);
       const ct = String(req.headers['content-type'] || '');
       const textual = !ct || /json|text|xml|x-www-form-urlencoded|javascript/i.test(ct);
-      const u = new URL(req.url, 'http://x');
+      // Fester Ursprung davor: "//pfad" wäre sonst ein Rechnername und der Pfad ginge verloren
+      const u = new URL(`http://x${String(req.url).startsWith('/') ? '' : '/'}${req.url}`);
       const full = { id: crypto.randomBytes(6).toString('hex'), t: Date.now(), method: req.method, path: u.pathname, query: u.search.slice(1), headers: req.headers, size, cut, base64: !textual, body: textual ? buf.toString('utf8') : buf.toString('base64'), from: req.headers['cf-connecting-ip'] || req.socket.remoteAddress };
+      full.event = eventOf(full.headers, textual ? full.body : ''); // einmal beim Empfang statt bei jedem Abruf der Liste
       const route = matchRoute(this.cfg.routes, full.path);
       const cfg = route || this.cfg;
       if (route) full.route = route.id;
-      if (cfg.secret) full.verified = verify(full, cfg.secret, cfg.kind, { header: cfg.header, url: cfg.url || publicUrl(full) });
+      // Abgeschnittener Inhalt: die Signatur gilt für den ganzen – „passt nicht“ wäre irreführend
+      if (cfg.secret) full.verified = cut ? { ok: null, why: 'Body was cut at 1 MB – the signature cannot be checked' } : verify(full, cfg.secret, cfg.kind, { header: cfg.header, url: cfg.url || publicUrl(full) });
       // Ab hier nie mehr mit Klartext-Kopfzeilen speichern; weitergeleitet wird mit allen (aus dem Original)
       const item = this.protect(full);
       const answer = () => { res.writeHead(cfg.status, { 'content-type': cfg.contentType || 'text/plain' }); res.end(cfg.body || ''); };
+      // Auf Wunsch: ungültige Signatur mit 401 abweisen – der Absender sieht den Fehler, das Projekt bekommt nur Echtes
+      if (cfg.rejectInvalid && full.verified && full.verified.ok === false) {
+        item.answered = 401; this.store(item);
+        res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"error":"invalid signature"}');
+        return;
+      }
       if (!cfg.forward) { this.store(item); answer(); return; }
       if (cfg.passAnswer) {
         // Auf Wunsch: Antwort des Projekts zurückgeben (wartet auf das Projekt – manche Absender werten langes Warten als Fehler)
@@ -240,17 +306,17 @@ class Inbox {
     });
   }
   list() {
-    return this.items.map(({ body, headers, sealed, ...rest }) => ({ ...rest, event: eventOf(headers || {}, body) }));
+    return this.items.map(({ body, headers, sealed, ...rest }) => ({ ...rest, event: rest.event !== undefined ? rest.event : eventOf(headers || {}, rest.base64 ? '' : body) }));
   }
   /** One call for the page – sensitive headers stay masked. */
   get(id) { const it = this.items.find((x) => x.id === id); if (!it) throw Object.assign(new Error('Call not found'), { status: 404 }); const { sealed, ...rest } = it; return rest; }
   /** One call with everything for sending it again (sealed headers opened). */
   full(id) { const it = this.items.find((x) => x.id === id); if (!it) throw Object.assign(new Error('Call not found'), { status: 404 }); return { ...it, headers: { ...it.headers, ...this.openHeaders(it) } }; }
-  clear() { this.items = []; this.write('items', []); }
+  clear() { this.items = []; if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; } this.write('items', []); }
   async replay(id, target) {
     const it = this.items.find((x) => x.id === id);
     const r = await sendTo(this.full(id), target || this.cfg.forward, { fetchFn: this.fetchFn });
-    it.replays = [...(it.replays || []), { t: Date.now(), ...r }].slice(-5); this.write('items', this.items);
+    it.replays = [...(it.replays || []), { t: Date.now(), ...r }].slice(-5); this.saveItems();
     return r;
   }
 }
@@ -268,4 +334,4 @@ function eventOf(headers, body) {
   return null;
 }
 
-module.exports = { Inbox, verify, sendTo, matchRoute, splitHeaders, eventOf, publicUrl, MASK, KINDS };
+module.exports = { Inbox, verify, sendTo, matchRoute, splitHeaders, eventOf, publicUrl, trimItems, MASK, KINDS, MAX_TOTAL, HARD_LIMIT };
